@@ -1,5 +1,7 @@
 from pandas import read_csv
-from .file_identification import *
+
+from spin_optics.data_wrangling.file_identification import *
+
 
 def data_for_value(data, value, column_name, key_name='Timestamp'):
     """

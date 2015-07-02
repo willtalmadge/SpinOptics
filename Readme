@@ -1,0 +1,6 @@
+A library of analysis code used by the Spin Optics group in the Department of Physics at the University of Utah.
+
+To install this on a local machine, download the repository, and run
+pip install <directory>
+To install in developer mode, run
+pip install -e <directory>

@@ -8,7 +8,11 @@ setup(name='spin-optics',
       author_email='willtalmadge@gmail.com',
       license='MIT',
       packages=[
-          'data_wrangling', 'fitting', 'models', 'plotting', 'unit_converters'
+          'spin_optics.data_wrangling',
+          'spin_optics.fitting',
+          'spin_optics.models',
+          'spin_optics.plotting',
+          'spin_optics.unit_converters'
       ],
       install_requires=[
           'numpy',
