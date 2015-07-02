@@ -1,1 +1,1 @@
-from spin_optics.models import *
+from .models import *

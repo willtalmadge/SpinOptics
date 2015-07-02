@@ -17,6 +17,7 @@ setup(name='spin-optics',
       install_requires=[
           'numpy',
           'scipy',
-          'pandas'
+          'pandas',
+          'matplotlib'
       ],
       zip_safe=False)
