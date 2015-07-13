@@ -7,3 +7,5 @@ def hanle_lifetime_gauss_in_sec(k, g=1.0):
     """
     return 10000*1.05457173e-34 * k /(g* 9.27400968e-24)
 
+def energy_ev(wavelength_nm):
+    return 6.62606957e-34*3e8/(1e-9*wavelength_nm*1.602176565e-19)
