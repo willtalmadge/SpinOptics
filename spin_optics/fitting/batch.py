@@ -25,9 +25,10 @@ def progressive_fit(data, loader, init_p, p_names, model,
     for k in keys:
         print(k)
         d = loader(k)
-        if d[key_name].count() == 0:
+        if len(d.index) == 0:
             return
-        p, cov = opt.curve_fit(model, d[x_name], d[y_name], last_p, maxfev=4000)
+        print(last_p)
+        p, cov = opt.curve_fit(model, d[x_name], d[y_name], last_p, maxfev=10000)
         print(p)
         for i in range(0, len(p)):
             data.loc[data[key_name] == k, p_names[i]] = p[i]
