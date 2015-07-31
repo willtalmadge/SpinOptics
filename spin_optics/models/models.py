@@ -15,7 +15,7 @@ def double_lorentzian_centered(x, *p):
     """
     return p[0]/(1+(p[1]*x)**2) + p[2]/(1+(p[3]*(x))**2) + p[4]
     
- def double_lorentzian_centered_no_off(x, *p):
+def double_lorentzian_centered_no_off(x, *p):
     """
     A double Lorentzian model centered at x=0 with no offset, but it still takes
     the offset parameter so it can be used interchangeably with the offset version.
