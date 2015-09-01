@@ -12,7 +12,8 @@ setup(name='spin-optics',
           'spin_optics.fitting',
           'spin_optics.models',
           'spin_optics.plotting',
-          'spin_optics.unit_converters'
+          'spin_optics.unit_converters',
+          'spin_optics.hanle_effect'
       ],
       install_requires=[
           'numpy',
