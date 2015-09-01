@@ -9,3 +9,12 @@ def filename_containing_string(string, directory='.'):
         return files[0]
     else:
         return ''
+
+def filename_containing_string_in_dirs(sub_string, search_dirs):
+    filename = filename_containing_string(sub_string)
+    if filename == '':
+        for d in search_dirs:
+            filename = filename_containing_string(sub_string, directory=d)
+            if filename != '':
+                return d + filename
+    return filename
