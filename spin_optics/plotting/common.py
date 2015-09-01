@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import scipy.optimize as opt
 from spin_optics.models import double_lorentzian_centered, lorentzian
 
-def double_lorentzian_fig(p, xs, ys, title):
+def double_lorentzian_fig(p, xs, ys, title=''):
     """
     Creates a figure that plots the components of the centered double Lorentzian model, the sum of
     the components, the data and a single Lorentzian model for comparison.
