@@ -1,4 +1,12 @@
 import scipy.optimize as opt
+import numpy as np
+
+def global_fit(model, x, y, init_p, method_func=opt.fmin):
+    def cost(p):
+        err = y - model(x, *p)
+        return np.log(np.dot(err, err))
+    p = opt.basinhopping(cost, np.array(init_p), niter=1000, T=10)
+    return p
 
 def progressive_fit(data, loader, init_p, p_names, model,
                     keys, key_name='Timestamp', x_name='Field', y_name='FR', 
