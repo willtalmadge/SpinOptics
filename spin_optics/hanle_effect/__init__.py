@@ -29,7 +29,8 @@ def generate_hanle_params(data,
                           mag_field_col_name='Field',
                           faraday_rot_col_name='FR',
                           X_col_name='X',
-                          Y_col_name='Y'):
+                          Y_col_name='Y',
+                          model=double_lorentzian_centered_no_off):
     hanle_model_cols = ['A1', 'k1', 'A2', 'k2']
     for c in hanle_model_cols:
         if not c in data:
