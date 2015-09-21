@@ -14,7 +14,7 @@ def filename_containing_string(string, directory='.'):
     else:
         return ''
 
-def filename_containing_string_in_dirs(sub_string, search_dirs):
+def filename_containing_string_in_dirs(sub_string, search_dirs=['.']):
     filename = filename_containing_string(sub_string)
     if filename == '':
         for d in search_dirs:
