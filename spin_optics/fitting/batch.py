@@ -35,7 +35,7 @@ def progressive_fit(data, loader, init_p, p_names, model,
         if len(d.index) == 0:
             return
         p, cov = opt.curve_fit(model, d[x_name], d[y_name], last_p, maxfev=10000)
-        for i in range(0, len(p)):
+        for i in range(0, len(p_names)):
             data.loc[data[key_name] == k, p_names[i]] = p[i]
         last_p = p
         post_process(p, d[x_name], d[y_name], k)
