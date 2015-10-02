@@ -6,6 +6,7 @@ from spin_optics.data_wrangling import filename_containing_string_in_dirs, filen
 from spin_optics.plotting import double_lorentzian_fig
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.optimize as opt
 
 """
 Goal is to split this into two phases, generate the hanle parameters and potentially cache or aggregate
@@ -30,8 +31,9 @@ def generate_hanle_params(data,
                           faraday_rot_col_name='FR',
                           X_col_name='X',
                           Y_col_name='Y',
-                          model=double_lorentzian_centered_no_off):
-    hanle_model_cols = ['A1', 'k1', 'A2', 'k2']
+                          model=double_lorentzian_centered_no_off,
+                          fitter=opt.curve_fit):
+    hanle_model_cols = ['A1', 'k1', 'A2', 'k2', 'y0']
     for c in hanle_model_cols:
         if not c in data:
             data[c] = np.nan
@@ -51,11 +53,12 @@ def generate_hanle_params(data,
                         curve_loader,
                         init_p,
                         hanle_model_cols,
-                        double_lorentzian_centered_no_off,
+                        model,
                         path,
                         key_name=independent_variable_name,
                         x_name=mag_field_col_name,
-                        y_name=faraday_rot_col_name)
+                        y_name=faraday_rot_col_name,
+                        fitter=fitter)
 
     data['L1'] = data[hanle_model_cols[1]].apply(lambda k: hanle_lifetime_gauss_in_sec(abs(k)))
     data['L2'] = data[hanle_model_cols[3]].apply(lambda k: hanle_lifetime_gauss_in_sec(abs(k)))
@@ -92,7 +95,8 @@ def plot_and_save_hanle_params(data,
     plt.plot(data[var_col], data[A2_col], 'ob', alpha=0.5)
 
     for x in range(0,data.W.count()):
-        plt.text(data[var_col].iloc[x], data[A2_col].iloc[x], str(data[key_col].iloc[x]), fontsize=6)
+        plt.text(data[var_col].iloc[x], max(data[A2_col].iloc[x], data[A1_col].iloc[x]),
+                 str(data[key_col].iloc[x]), fontsize=6)
 
     ax.set_yticklabels(ax.get_yticks()/1e-6)
     plt.ylabel('Faraday Rotation ($\mu rad$)')
@@ -147,30 +151,34 @@ def plot_and_save_hanle_params(data,
 
 def plot_hanle_curve_fits(data,
                           key_col='Timestamp',
-                           var_col='W',
-                           A1_col='A1',
-                           A2_col='A2',
-                           k1_col='k1',
-                           k2_col='k2',
+                          var_col='W',
+                          A1_col='A1',
+                          A2_col='A2',
+                          k1_col='k1',
+                          k2_col='k2',
                           L1_col='L1',
                           L2_col='L2',
+                          y0_col='y0',
                           Field_col='Field',
                           FR_col='FR',
-                           file_key_format='%04d',
+                          file_key_format='%04d',
                           search_dirs='.',
                           file_column_names=['Field', 'X', 'Y', 'PDA', 'FR', 'Timestamp']
-                           ):
+                          ):
     for i in range(0, len(data.index)):
         d = read_csv(filename_containing_string_in_dirs(file_key_format % data.loc[i, key_col], search_dirs))
         d.columns = file_column_names
         p = [data.loc[i, A1_col],
              data.loc[i, k1_col],
              data.loc[i, A2_col],
-             data.loc[i, k2_col], 0]
+             data.loc[i, k2_col],
+             data.loc[i, y0_col]]
+        dm = d.groupby('Field')
         fig = double_lorentzian_fig(p, d[Field_col], d[FR_col],
-                                    (file_key_format + '\n %fnm, %fns, %fns') % (data.loc[i, key_col],
-                                                                                 data.loc[i, var_col],
-                                                                         data.loc[i, L1_col]/1e-9,
-                                                                         data.loc[i, L2_col]/1e-9))
+                                    xm=dm.Field.mean(), ym=dm.FR.mean(),
+                                    title=(file_key_format + '\n %fnm, %fns, %fns') % (data.loc[i, key_col],
+                                                                                       data.loc[i, var_col],
+                                                                                       data.loc[i, L1_col]/1e-9,
+                                                                                       data.loc[i, L2_col]/1e-9))
         fig.savefig('./fits/%04d_%04d.pdf' % (data.loc[i, var_col]*10, data.loc[i, key_col]))
         plt.close(fig)

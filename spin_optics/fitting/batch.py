@@ -1,15 +1,22 @@
 import scipy.optimize as opt
 import numpy as np
 
-def global_fit(model, x, y, init_p, method_func=opt.fmin):
+def global_fit(model, x, y, init_p, niter=1000, T=10):
     def cost(p):
         err = y - model(x, *p)
         return np.log(np.dot(err, err))
-    p = opt.basinhopping(cost, np.array(init_p), niter=1000, T=10)
+    p = opt.basinhopping(cost, np.array(init_p), niter, T)
     return p
 
+def regularized_curve_fit(model, x, y, init_p, regularization=0):
+    def cost(p):
+        err = y - model(x, *p)
+        return np.dot(err, err) + regularization * np.dot(p, p)
+    p = opt.minimize(cost, init_p)
+    return (p.x, None)
+
 def progressive_fit(data, loader, init_p, p_names, model,
-                    keys, key_name='Timestamp', x_name='Field', y_name='FR', 
+                    keys, fitter=opt.curve_fit, key_name='Timestamp', x_name='Field', y_name='FR',
                     post_process=lambda a, b, c, d: None):
     """
     Fits a `model` to data files returned by loader, mapped by keys in data. This batch
@@ -34,8 +41,8 @@ def progressive_fit(data, loader, init_p, p_names, model,
         d = loader(k)
         if len(d.index) == 0:
             return
-        p, cov = opt.curve_fit(model, d[x_name], d[y_name], last_p, maxfev=10000)
-        for i in range(0, len(p_names)):
+        p, cov = fitter(model, d[x_name], d[y_name], last_p)
+        for i in range(0, len(p)):
             data.loc[data[key_name] == k, p_names[i]] = p[i]
         last_p = p
         post_process(p, d[x_name], d[y_name], k)

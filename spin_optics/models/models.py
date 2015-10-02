@@ -25,3 +25,18 @@ def double_lorentzian_centered_no_off(x, *p):
     :return: the value of the centered double Lorentzian
     """
     return p[0]/(1+(p[1]*x)**2) + p[2]/(1+(p[3]*x)**2)
+
+#TODO: need a model with fixed background
+
+def double_lorentzian_centered_fixed_off(offset):
+    """
+    A double Lorentzian model centered at x=0 with fixed offset, but it still takes
+    the offset parameter so it can be used interchangeably with the offset version.
+    The offset parameter will not affect the optimizer output.
+    :param x:
+    :param p: parameter ordering -- 0: A1, 1: k1, 2:A2, 3:k2, 4: yc
+    :return: the value of the centered double Lorentzian
+    """
+    def func(x, *p):
+        return p[0]/(1+(p[1]*x)**2) + p[2]/(1+(p[3]*x)**2) + offset
+    return func
