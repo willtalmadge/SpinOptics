@@ -59,3 +59,4 @@ lib64
 
 .idea
 .settings
+.vscode/settings.json
