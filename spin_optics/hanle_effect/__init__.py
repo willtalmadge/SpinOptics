@@ -309,13 +309,13 @@ def store_hanle_curve_fit(sample_id,
     if rms_filter:
         # The rms filter prohibits updating documents if the new fit is worse than what is in the db
         if new_doc['rms_error'] >= old['rms_error']:
-            return old['_id']
+            return {'id': old['_id'], 'did_update': False}
 
     if old is not None:
         hanle_curve_fits.remove({'_id': old['_id']})
         new_doc.update({'_id': old['_id']})
 
-    return hanle_curve_fits.insert(new_doc)
+    return {'id': hanle_curve_fits.insert(new_doc), 'did_update': True}
 
 def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
     f2, ax2 = plt.subplots()
