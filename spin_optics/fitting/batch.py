@@ -1,11 +1,41 @@
 import scipy.optimize as opt
 import numpy as np
 
-def global_fit(model, x, y, init_p, niter=1000, T=10):
-    def cost(p):
-        err = y - model(x, *p)
-        return np.log(np.dot(err, err))
-    p = opt.basinhopping(cost, np.array(init_p), niter, T)
+def rms_error_cost(p, x, y, model, penalize_offset=None, regularization=None):
+    # Compute the RMS error between the proposed model and the data
+    err = y - model(x, *p)
+    if penalize_offset:
+        return np.dot(err, err) + p[4]**2
+    elif regularization is not None:
+        return np.dot(err, err) + regularization*np.dot(p, p)
+    else:
+        return np.dot(err, err)
+
+def global_curve_fit(model, x, y, init_p, cost_func=rms_error_cost,
+                     basinhopping_kwargs=None,
+                     cost_func_kwargs=None):
+    """
+    Global fit the parameters of a curve with a basin hopping algorithm
+    :param model:
+    :param x:
+    :param y:
+    :param init_p:
+    :return:
+    """
+
+    cost_args = (x, y, model)
+    if cost_func_kwargs is not None:
+        if 'penalize_offset' in cost_func_kwargs:
+            cost_args = cost_args + (cost_func_kwargs['penalize_offset'], )
+        if 'regularization' in cost_func_kwargs: \
+           cost_args = cost_args + (cost_func_kwargs['regularization'], )
+
+    if basinhopping_kwargs is None:
+        basinhopping_kwargs = {}
+
+    p = opt.basinhopping(cost_func, np.array(init_p),
+                         minimizer_kwargs={'args': cost_args},
+                         **basinhopping_kwargs)
     return p
 
 def regularized_curve_fit(model, x, y, init_p, regularization=0):

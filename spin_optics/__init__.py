@@ -1,1 +1,3 @@
-__author__ = 'williamtalmadge'
+from pint import UnitRegistry
+ureg = UnitRegistry()
+Q_ = ureg.Quantity

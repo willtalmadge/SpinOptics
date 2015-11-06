@@ -1,3 +1,5 @@
+import numpy as np
+
 def lorentzian(x, *p):
     """
 
@@ -26,8 +28,6 @@ def double_lorentzian_centered_no_off(x, *p):
     """
     return p[0]/(1+(p[1]*x)**2) + p[2]/(1+(p[3]*x)**2)
 
-#TODO: need a model with fixed background
-
 def double_lorentzian_centered_fixed_off(offset):
     """
     A double Lorentzian model centered at x=0 with fixed offset, but it still takes
@@ -39,4 +39,33 @@ def double_lorentzian_centered_fixed_off(offset):
     """
     def func(x, *p):
         return p[0]/(1+(p[1]*x)**2) + p[2]/(1+(p[3]*x)**2) + offset
+    return func
+
+def centered_lorentzian_mixture(lorentzian_count, constant_offset=None):
+    """
+    Generates a Lorentzian mixture model with an optional fixed offset. It is up to the user to pass
+    the correct length initial parameter list into an optimizer that uses this model. A runtime check
+    is done for correct parameter list length to catch errors. A ValueError is thrown if the wrong length
+    parameter list is passed.
+    :param lorentzian_count:
+    :param constant_offset:
+    :return:
+    """
+    if constant_offset is None:
+        def func(x, *p):
+            if not (len(p) == 2*lorentzian_count + 1):
+                raise ValueError("Passed parameter list is of length %d, expected %d" % (len(p), 2*lorentzian_count + 1))
+            result = np.zeros(x.size)
+            for i in range(0, lorentzian_count):
+                result += p[0 + i*2]/(1+(p[1 + i*2]*x)**2)
+            result += p[-1]
+            return result
+    else:
+        def func(x, *p):
+            if not (len(p) == 2*lorentzian_count):
+                raise ValueError("Passed parameter list is of length %d, expected %d" % (len(p), 2*lorentzian_count))
+            result = np.full(x.size, constant_offset)
+            for i in range(0, lorentzian_count):
+                result += p[0 + i*2]/(1+(p[1 + i*2]*x)**2)
+            return result
     return func
