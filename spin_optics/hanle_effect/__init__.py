@@ -200,7 +200,6 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
                            niter=100,
                            T=100,
                            stepsize=500,
-                           repeats=1,
                            threads_for_repeats=8,
                            constant_offset=None,
                            penalize_offset=False,  #This precludes regularization
@@ -233,38 +232,11 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
     field = scaler_Field.transform(field_data)
     fr = scaler_FR.transform(faraday_rotation_data)
 
-    if repeats > 1:
-        """
-        Start the search multiple times from the same initial conditions. The reason we don't just run
-        the search longer is that some minima are so far from the initial conditions that the solver can
-        never come back and explore other candidates. Examples that trigger this problem would be if the
-        optimizer used one of the Lorentzians as a background, this requires a width parameter that
-        diverges to infinity. When this occurs the step size parameter needs to diverge also to come back
-        and explore a solution space with finite widths.
-        """
-
-        pool = Pool(threads_for_repeats)
-
-        results = []
-        for i in range(0, repeats):
-            results.append(pool.apply_async(global_curve_fit, [(model, field, fr, init_p, {
-                'niter': niter,
-                'stepsize': stepsize,
-                'T': T
-            }, None)]))
-
-        ps = [r.get() for r in results]
-        fun = np.inf
-        for pc in ps:
-            if pc.fun < fun:
-                p = pc
-                fun = pc.fun
-    else:
-        p = global_curve_fit(model, field, fr, init_p, basinhopping_kwargs={
-            'niter': niter,
-            'stepsize': stepsize,
-            'T': T
-        })
+    p = global_curve_fit(model, field, fr, init_p, basinhopping_kwargs={
+        'niter': niter,
+        'stepsize': stepsize,
+        'T': T
+    })
 
     # Extract the parameters from the solution, and rescale the background
     if constant_offset is None:
@@ -298,7 +270,7 @@ def store_hanle_curve_fit(sample_id,
                           when_end,
                           parameter_dict={},
                           db_conn=None,
-                          rms_filter=False):
+                          rms_filter=True):
 
     if (when.tzinfo is not pytz.UTC) or (when_end.tzinfo is not pytz.UTC):
         raise ValueError("When should be a datetime with a tzinfo of pytz.UTC")
@@ -333,11 +305,17 @@ def store_hanle_curve_fit(sample_id,
     }) 
     new_doc.update(parameter_dict)
     old = hanle_curve_fits.find_one(doc)
+
+    if rms_filter:
+        # The rms filter prohibits updating documents if the new fit is worse than what is in the db
+        if new_doc['rms_error'] >= old['rms_error']:
+            return old['_id']
+
     if old is not None:
         hanle_curve_fits.remove({'_id': old['_id']})
         new_doc.update({'_id': old['_id']})
 
-    return hanle_curve_fits.insert(new_doc)#hanle_curve_fits.update(doc, new_doc, upsert=True)
+    return hanle_curve_fits.insert(new_doc)
 
 def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
     f2, ax2 = plt.subplots()
