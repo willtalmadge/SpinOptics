@@ -306,7 +306,7 @@ def store_hanle_curve_fit(sample_id,
     new_doc.update(parameter_dict)
     old = hanle_curve_fits.find_one(doc)
 
-    if rms_filter:
+    if rms_filter and (old is not None):
         # The rms filter prohibits updating documents if the new fit is worse than what is in the db
         if new_doc['rms_error'] >= old['rms_error']:
             return {'id': old['_id'], 'did_update': False}
