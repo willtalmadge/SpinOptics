@@ -20,7 +20,7 @@ from functools import partial
 from spin_optics.misc import trunc
 
 import pytz
-
+import time
 """
 Goal is to split this into two phases, generate the hanle parameters and potentially cache or aggregate
 into a central database.
@@ -208,8 +208,8 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
     # Construct initial conditions that spread out the widths. We expect some distribution typically
     # so an evenly spaced distribution of widths allows the fitter to search for a range of widths
     # in the source data.
-    inv_hwhm_init = np.arange(0.1, 1.0, 1.0/lorentzian_count)
-    amplitudes_init = np.full(lorentzian_count, 1)
+    inv_hwhm_init = 1/np.arange(0.1, 1, 1/lorentzian_count)
+    amplitudes_init = np.random.rand(lorentzian_count)
 
     if constant_offset is None:
         # Construct a model with the background constant as a free parameter
@@ -245,10 +245,12 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
     else:
         amplitudes_opt = p.x[::2]
         offset_opt = constant_offset
-    inv_hwhm_opt = abs(p.x[1::2])
+    inv_hwhm_opt = np.abs(p.x[1::2])
 
     # Sort the results with the narrow Lorentzians appearing at the lowest indices
-    amplitudes_opt = amplitudes_opt[inv_hwhm_opt.argsort()]
+    permute = inv_hwhm_opt.argsort()
+    inv_hwhm_opt = inv_hwhm_opt[permute]
+    amplitudes_opt = amplitudes_opt[permute]
 
     # Remove the scaling from the parameters so they are in the units of the source data
     amplitudes_opt = amplitudes_opt*scaler_FR.std_
@@ -293,7 +295,7 @@ def store_hanle_curve_fit(sample_id,
         'probe_intensity': trunc(probe_intensity.to(ureg.watts).magnitude),
         'pump_energy': trunc(pump_energy.to(ureg.eV).magnitude),
         'pump_intensity': trunc(pump_intensity.to(ureg.watts).magnitude),
-        'when': when,
+        'when':a when,
         'when_end': when_end
     }
     new_doc = doc.copy()
@@ -329,7 +331,7 @@ def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
 
 
     # Plot the multiple lorentzian
-    count = hanle_curve_fit_params['amplitude'].size
+    count = len(list(hanle_curve_fit_params['amplitude']))
     model = centered_lorentzian_mixture(count)
     params = np.zeros(2*count + 1)
     params[:-1:2] = hanle_curve_fit_params['amplitude']
@@ -350,6 +352,7 @@ def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
 
     ax2.set_ylabel('Faraday Rotation ($\mu rad$)')
     ax2.set_xlabel('Field (Gauss)')
+
 
 def hanle_curve_title_from_stored(curve_id, db_conn=None):
     if db_conn is None:

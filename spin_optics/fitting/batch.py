@@ -4,7 +4,7 @@ import numpy as np
 def rms_error_cost(p, x, y, model, penalize_offset=None, regularization=None):
     # Compute the RMS error between the proposed model and the data
     err = y - model(x, *p)
-    if penalize_offset:
+    if penalize_offset is not None:
         return np.dot(err, err) + p[4]**2
     elif regularization is not None:
         return np.dot(err, err) + regularization*np.dot(p, p)
