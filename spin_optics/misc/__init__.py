@@ -1,6 +1,7 @@
 import base64
 import os
 import math
+import numpy as np
 
 def b32uuid(n=10):
     return base64.b32encode(bytearray(os.urandom(n))).decode('utf-8').upper()
@@ -18,3 +19,8 @@ def trunc(f, decimal_precision=8):
         return float('nan')
     else:
         return int(10**decimal_precision*f)/10**decimal_precision
+
+def rephase(x, y, theta_offset):
+    r = np.sqrt(x**2 + y**2)
+    theta = (np.arctan2(y, x) + np.pi + theta_offset) % np.pi
+    return(r * np.cos(theta), r*np.sin(theta))
