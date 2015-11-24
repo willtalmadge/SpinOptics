@@ -21,6 +21,8 @@ from spin_optics.misc import trunc
 
 import pytz
 import time
+import dateutil
+
 """
 Goal is to split this into two phases, generate the hanle parameters and potentially cache or aggregate
 into a central database.
@@ -295,7 +297,7 @@ def store_hanle_curve_fit(sample_id,
         'probe_intensity': trunc(probe_intensity.to(ureg.watts).magnitude),
         'pump_energy': trunc(pump_energy.to(ureg.eV).magnitude),
         'pump_intensity': trunc(pump_intensity.to(ureg.watts).magnitude),
-        'when':a when,
+        'when': when,
         'when_end': when_end
     }
     new_doc = doc.copy()
@@ -353,33 +355,45 @@ def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
     ax2.set_ylabel('Faraday Rotation ($\mu rad$)')
     ax2.set_xlabel('Field (Gauss)')
 
+def hanle_curve_title_from_params(fit_params, db_conn):
 
-def hanle_curve_title_from_stored(curve_id, db_conn=None):
-    if db_conn is None:
-        db_conn = MongoClient()
-    db = db_conn.spin_optics
-    samples = db.samples
-    hanle_curve_fits = db.hanle_curve_fits
-
-    curve = hanle_curve_fits.find_one({
-        '_id': curve_id
-    })
-    sample = samples.find_one({
-        '_id': curve['sample_id']
+    sample = db_conn.spin_optics.samples.find_one({
+        '_id': fit_params['sample_id']
     })
 
-    if curve is not None:
-        result = ( \
-                     'Hanle Effect on $%s$ \n'
-                     'Pump %.2f eV @ %d $\mu W$ Probe %.2f eV @ %d $\mu W$\n'
-                     'Temperature %.2f K'
-                     )% (sample['system'],
-                         curve['when'],
-                         curve['pump_energy'],
-                         curve['pump_intensity'],
-                         curve['probe_energy'],
-                         curve['probe_intensity'],
-                         curve['sample_temperature'])
-        return result
+    result = ('Hanle Effect on $%s$\n' % sample['system'] )
+    if 'capping' in sample.keys():
+        result += ('Capping layer "%s"' % sample['capping'])
+    if 'substrate' in sample.keys():
+        result += (', Substrate "%s"\n' % sample['substrate'])
     else:
-        raise ValueError('Bad curve id, no curve found')
+        result += '\n'
+    result += ('Pump %.2f eV @ %d $\mu W$ Probe %.2f eV @ %d $\mu W$\n' % (
+        fit_params['pump_energy'],
+        fit_params['pump_intensity']*1e6,
+        fit_params['probe_energy'],
+        fit_params['probe_intensity']*1e6
+    ))
+    result += ('Temperature %.1f K\n' % fit_params['sample_temperature'])
+
+    for a, l, i in zip(fit_params['amplitude'],
+                       fit_params['inv_hwhm'],
+                       range(0, len(list(fit_params['amplitude'])))):
+        result += ("Peak %d HWHM %d Gauss (g=1 lifetime is %.3fns\n" % (i+1, 1/l, 1e9*hanle_lifetime_gauss_in_sec(l)))
+
+    result += ("(SID %s, Measured %s)" % (sample['_id'], str(fit_params['when'])))
+    return result
+
+
+def hanle_fit_for_data(hanle_curve_data, db_conn):
+    when = pytz.timezone("MST").localize(
+        dateutil.parser.parse(hanle_curve_data.iloc[0]['Timestamp'])
+    ).astimezone(pytz.utc)
+    when_end = pytz.timezone("MST").localize(
+        dateutil.parser.parse(hanle_curve_data.iloc[-1]['Timestamp'])
+    ).astimezone(pytz.utc)
+
+    return db_conn.spin_optics.hanle_curve_fits.find_one({
+        'when': when,
+        'when_end': when_end
+    })
