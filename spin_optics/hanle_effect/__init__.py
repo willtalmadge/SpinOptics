@@ -295,7 +295,7 @@ def store_hanle_curve_fit(sample_id,
         'probe_intensity': trunc(probe_intensity.to(ureg.watts).magnitude),
         'pump_energy': trunc(pump_energy.to(ureg.eV).magnitude),
         'pump_intensity': trunc(pump_intensity.to(ureg.watts).magnitude),
-        'when':a when,
+        'when':when,
         'when_end': when_end
     }
     new_doc = doc.copy()
