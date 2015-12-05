@@ -234,6 +234,7 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
 
     field = scaler_Field.transform(field_data)
     fr = scaler_FR.transform(faraday_rotation_data)
+    measured_offset = scaler_FR.transform(measured_offset)
 
     cost_func_kwargs = {}
     if measured_offset is not None:
