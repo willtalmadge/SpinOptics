@@ -205,7 +205,8 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
                            threads_for_repeats=8,
                            constant_offset=None,
                            penalize_offset=False,  #This precludes regularization
-                           regularization=None):
+                           regularization=None,
+                           measured_offset=None):
 
     # Construct initial conditions that spread out the widths. We expect some distribution typically
     # so an evenly spaced distribution of widths allows the fitter to search for a range of widths
@@ -221,7 +222,7 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
     else:
         # Construct a model with the background as a fixed constant (not available to be optimized)
         model = centered_lorentzian_mixture(lorentzian_count=lorentzian_count,
-                                            constant_offset=constant_offset) #TODO: this needs to be properly scaled or its essentially zero
+                                            constant_offset=constant_offset) #TODO: this needs to be properly scaled or its essentially zero, this feature is useless right now
         init_p = np.zeros(2*lorentzian_count)
         init_p[::2] = amplitudes_init
 
@@ -234,11 +235,17 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
     field = scaler_Field.transform(field_data)
     fr = scaler_FR.transform(faraday_rotation_data)
 
+    cost_func_kwargs = {}
+    if measured_offset is not None:
+        cost_func_kwargs['measured_offset'] = measured_offset
+    if regularization is not None:
+        cost_func_kwargs['regularization'] = regularization
+
     p = global_curve_fit(model, field, fr, init_p, basinhopping_kwargs={
         'niter': niter,
         'stepsize': stepsize,
         'T': T
-    })
+    }, cost_func_kwargs=cost_func_kwargs)
 
     # Extract the parameters from the solution, and rescale the background
     if constant_offset is None:

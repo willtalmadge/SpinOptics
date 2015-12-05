@@ -1,11 +1,15 @@
 import scipy.optimize as opt
 import numpy as np
 
-def rms_error_cost(p, x, y, model, penalize_offset=None, regularization=None):
+def rms_error_cost(p, x, y, model, regularization=None, measured_offset=None):
     # Compute the RMS error between the proposed model and the data
+
+    #The measured offset induces a penalty on the offset parameter for a 2 peak
+    #lorentzian model as a difference from a measured offset value
+    #TODO: This is specific to a 2 parameter lorentzian, should find a general way to solve this problem or factor it into the hanle specific code
     err = y - model(x, *p)
-    if penalize_offset is not None:
-        return np.dot(err, err) + p[4]**2
+    if measured_offset is not None:
+        return np.dot(err, err) + y.size*(p[4]-measured_offset)**2
     elif regularization is not None:
         return np.dot(err, err) + regularization*np.dot(p, p)
     else:
@@ -23,18 +27,20 @@ def global_curve_fit(model, x, y, init_p, cost_func=rms_error_cost,
     :return:
     """
 
-    cost_args = (x, y, model)
+    #TODO: this is a hack specific to fitting hanle data, it makes this fitter not generalize to other problems
+    cost_args = [x, y, model, None, None]
+
     if cost_func_kwargs is not None:
-        if 'penalize_offset' in cost_func_kwargs:
-            cost_args = cost_args + (cost_func_kwargs['penalize_offset'], )
-        if 'regularization' in cost_func_kwargs: \
-           cost_args = cost_args + (cost_func_kwargs['regularization'], )
+        if 'regularization' in cost_func_kwargs.keys():
+            cost_args[3] = cost_func_kwargs['regularization']
+        if 'measure_offset' in cost_func_kwargs.keys():
+            cost_args[4] = cost_func_kwargs['measured_offset']
 
     if basinhopping_kwargs is None:
         basinhopping_kwargs = {}
 
     p = opt.basinhopping(cost_func, np.array(init_p),
-                         minimizer_kwargs={'args': cost_args},
+                         minimizer_kwargs={'args': tuple(cost_args)},
                          **basinhopping_kwargs)
     return p
 
