@@ -33,7 +33,7 @@ def global_curve_fit(model, x, y, init_p, cost_func=rms_error_cost,
     if cost_func_kwargs is not None:
         if 'regularization' in cost_func_kwargs.keys():
             cost_args[3] = cost_func_kwargs['regularization']
-        if 'measure_offset' in cost_func_kwargs.keys():
+        if 'measured_offset' in cost_func_kwargs.keys():
             cost_args[4] = cost_func_kwargs['measured_offset']
 
     if basinhopping_kwargs is None:
