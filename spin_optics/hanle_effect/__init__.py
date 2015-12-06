@@ -250,7 +250,7 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
         'T': T
     }, cost_func_kwargs=cost_func_kwargs)
 
-    print("Final offset %f" % p[4])
+    print("Final offset %f" % p.x[4])
     # Extract the parameters from the solution, and rescale the background
     if constant_offset is None:
         amplitudes_opt = p.x[:-1:2]
