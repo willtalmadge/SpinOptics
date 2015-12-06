@@ -234,10 +234,12 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
 
     field = scaler_Field.transform(field_data)
     fr = scaler_FR.transform(faraday_rotation_data)
-    measured_offset = scaler_FR.transform(np.array([measured_offset]))[0]
+
 
     cost_func_kwargs = {}
     if measured_offset is not None:
+        measured_offset = scaler_FR.transform(np.array([measured_offset]))[0]
+        print("using a measured offset penalty for scaled offset %f" % measured_offset)
         cost_func_kwargs['measured_offset'] = measured_offset
     if regularization is not None:
         cost_func_kwargs['regularization'] = regularization
@@ -248,6 +250,7 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
         'T': T
     }, cost_func_kwargs=cost_func_kwargs)
 
+    print("Final offset %f" % p[4])
     # Extract the parameters from the solution, and rescale the background
     if constant_offset is None:
         amplitudes_opt = p.x[:-1:2]
