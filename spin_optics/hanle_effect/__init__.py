@@ -4,6 +4,8 @@ from pandas import *
 from spin_optics.models import double_lorentzian_centered_no_off, centered_lorentzian_mixture, lorentzian
 from spin_optics.data_wrangling import filename_containing_string_in_dirs, filename_containing_string
 from spin_optics.plotting import double_lorentzian_fig
+from spin_optics.unit_converters import energy_ev
+
 from sklearn.preprocessing import StandardScaler
 from multiprocessing import Pool
 
@@ -283,7 +285,8 @@ def store_hanle_curve_fit(sample_id,
                           hanle_model_params,
                           when,
                           when_end,
-                          parameter_dict={},
+                          probe_background=None,
+                          parameter_dict=None,
                           db_conn=None,
                           rms_filter=True):
 
@@ -300,6 +303,11 @@ def store_hanle_curve_fit(sample_id,
         raise ValueError('The provided sample id does not exist in the spin optics samples collection')
 
     hanle_curve_fits = db.hanle_curve_fits
+
+    if parameter_dict is None:
+        parameter_dict = {}
+    if probe_background is not None:
+        parameter_dict.update({'probe_background': trunc(probe_background.to(ureg.radian).magnitude)})
 
     doc = {
         'sample_id': sample_id,
@@ -331,6 +339,61 @@ def store_hanle_curve_fit(sample_id,
         new_doc.update({'_id': old['_id']})
 
     return {'id': hanle_curve_fits.insert(new_doc), 'did_update': True}
+def update_hanle(data,
+                 temperature,
+                 wavelength,
+                 probe_intensity,
+                 probe_energy,
+                 pump_intensity,
+                 pump_wavelength,
+                 probe_background,
+                 sample_id,
+                 db_con,
+                 extra_parameters=None,
+                 regularization=None, peaks=2, rms_filter=True):
+    """
+    Expects column layout ['Field', 'X', 'Y', 'PDA', 'FR', 'Timestamp']
+    """
+
+    if extra_parameters is None:
+        extra_parameters = {}
+    if probe_background is not None:
+        extra_parameters.update({"constrained_offset": 1})
+
+    if regularization is not None:
+        extra_parameters.update({'fitter_regularization_used': regularization})
+    p = global_hanle_curve_fit(data.Field.values, data.FR.values, peaks,
+                               stepsize=100, T=200, niter=100, regularization=regularization,
+                              measured_offset=probe_background)
+
+    total_amp = sum(p['amplitude'])
+    for a in p['amplitude']:
+        if abs(total_amp/a) < 0.1:
+            print('Nearly equal peak cancellation, rejecting solution')
+            return
+
+    when = pytz.timezone("MST").localize(
+        dateutil.parser.parse(data.iloc[0]['Timestamp'])
+    ).astimezone(pytz.utc)
+    when_end = pytz.timezone("MST").localize(
+        dateutil.parser.parse(data.iloc[-1]['Timestamp'])
+    ).astimezone(pytz.utc)
+
+    result = store_hanle_curve_fit(
+        sample_id=sample_id,
+        sample_temperature=temperature,
+        probe_energy=energy_ev(wavelength.to(ureg.nanometers).magnitude) * ureg.eV,
+        probe_intensity=probe_intensity,
+        pump_energy=energy_ev(pump_wavelength.to(ureg.nanometers).magnitude) * ureg.eV,
+        pump_intensity=pump_intensity,
+        when=when,
+        when_end=when_end,
+        hanle_model_params=p,
+        probe_background=probe_background,
+        parameter_dict=extra_parameters,
+        db_conn=db_con,
+        rms_filter=rms_filter
+    )
 
 def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
     f2, ax2 = plt.subplots()
