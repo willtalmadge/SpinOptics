@@ -286,7 +286,8 @@ def store_hanle_curve_fit(sample_id,
                           when,
                           when_end,
                           probe_background=None,
-                          parameter_dict=None,
+                          additional_query_params=None,
+                          additional_params=None,
                           db_conn=None,
                           rms_filter=True):
 
@@ -304,10 +305,10 @@ def store_hanle_curve_fit(sample_id,
 
     hanle_curve_fits = db.hanle_curve_fits
 
-    if parameter_dict is None:
-        parameter_dict = {}
+    if additional_params is None:
+        additional_params = {}
     if probe_background is not None:
-        parameter_dict.update({'probe_background': trunc(probe_background.to(ureg.radian).magnitude)})
+        additional_params.update({'probe_background': trunc(probe_background.to(ureg.radian).magnitude)})
 
     doc = {
         'sample_id': sample_id,
@@ -319,6 +320,13 @@ def store_hanle_curve_fit(sample_id,
         'when': when,
         'when_end': when_end
     }
+
+    # Generally a fit should depend just on when it was taken and the experimental conditions
+    # but if we play around with fitter parameters, we might want to store several versions
+    # of a fit with the same experimental conditions
+    if additional_query_params is not None:
+        doc.update(additional_query_params)
+
     new_doc = doc.copy()
     new_doc.update({
         'amplitude': list(hanle_model_params['amplitude']),
@@ -326,7 +334,7 @@ def store_hanle_curve_fit(sample_id,
         'offset': hanle_model_params['offset'],
         'rms_error' : hanle_model_params['rms_error']
     }) 
-    new_doc.update(parameter_dict)
+    new_doc.update(additional_params)
     old = hanle_curve_fits.find_one(doc)
 
     if rms_filter and (old is not None):
@@ -339,38 +347,49 @@ def store_hanle_curve_fit(sample_id,
         new_doc.update({'_id': old['_id']})
 
     return {'id': hanle_curve_fits.insert(new_doc), 'did_update': True}
-def update_hanle(data,
+
+def update_hanle(sample_id,
+                 data,
                  temperature,
                  wavelength,
                  probe_intensity,
-                 probe_energy,
-                 pump_intensity,
                  pump_wavelength,
+                 pump_intensity,
+                 mbr_brf_displacement,
                  probe_background,
-                 sample_id,
-                 db_con,
-                 extra_parameters=None,
-                 regularization=None, peaks=2, rms_filter=True):
-    """
-    Expects column layout ['Field', 'X', 'Y', 'PDA', 'FR', 'Timestamp']
-    """
+                 constrain_background=False,
+                 regularization=None, peaks=2, rms_filter=True,
+                 additional_params=None,
+                 db_conn=None):
 
-    if extra_parameters is None:
-        extra_parameters = {}
-    if probe_background is not None:
-        extra_parameters.update({"constrained_offset": 1})
+    additional_params = {
+            'mbr_brf_displacement': mbr_brf_displacement.to(ureg.millimeters).magnitude
+        }
+    additional_params.update(additional_params)
+
+    additional_query_params = {}
+    if constrain_background:
+        additional_query_params.update({"constrained_offset": 1})
+    else:
+        additional_query_params.update({"constrained_offset": 0})
 
     if regularization is not None:
-        extra_parameters.update({'fitter_regularization_used': regularization})
-    p = global_hanle_curve_fit(data.Field.values, data.FR.values, peaks,
-                               stepsize=100, T=200, niter=100, regularization=regularization,
-                              measured_offset=probe_background)
+        additional_params.update({'fitter_regularization_used': regularization})
+
+    if constrain_background:
+        measured_offset = probe_background
+    else:
+        measured_offset = None
+
+    p = global_hanle_curve_fit(data.Field.values, data.FR.values, peaks, stepsize=500,
+                               T=200, niter=100, regularization=regularization,
+                              measured_offset=measured_offset)
 
     total_amp = sum(p['amplitude'])
     for a in p['amplitude']:
         if abs(total_amp/a) < 0.1:
             print('Nearly equal peak cancellation, rejecting solution')
-            return
+            return None
 
     when = pytz.timezone("MST").localize(
         dateutil.parser.parse(data.iloc[0]['Timestamp'])
@@ -390,10 +409,14 @@ def update_hanle(data,
         when_end=when_end,
         hanle_model_params=p,
         probe_background=probe_background,
-        parameter_dict=extra_parameters,
-        db_conn=db_con,
+        additional_params=additional_params,
+        additional_query_params=additional_query_params,
+        db_conn=db_conn,
         rms_filter=rms_filter
     )
+
+    if result['did_update']:
+        return p
 
 def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
     f2, ax2 = plt.subplots()
