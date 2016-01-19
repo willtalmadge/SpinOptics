@@ -252,7 +252,6 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
         'T': T
     }, cost_func_kwargs=cost_func_kwargs)
 
-    print("Final offset %f" % p.x[4])
     # Extract the parameters from the solution, and rescale the background
     if constant_offset is None:
         amplitudes_opt = p.x[:-1:2]
@@ -362,9 +361,11 @@ def update_hanle(sample_id,
                  additional_params=None,
                  db_conn=None):
 
-    additional_params = {
+    if additional_params is None:
+        additional_params = {}
+    additional_params.update({
             'mbr_brf_displacement': mbr_brf_displacement.to(ureg.millimeters).magnitude
-        }
+        })
     additional_params.update(additional_params)
 
     additional_query_params = {}
@@ -428,7 +429,7 @@ def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
     dm = hanle_curve_data.groupby('Field')
     ax2.plot(dm.Field.mean(), dm.FR.mean(), '-o', color=sb.xkcd_rgb['mango'], alpha=0.5, markersize=4)
 
-
+    field_grid = np.linspace(np.min(hanle_curve_data.Field), np.max(hanle_curve_data.Field), 1000)
     # Plot the multiple lorentzian
     count = len(list(hanle_curve_fit_params['amplitude']))
     model = centered_lorentzian_mixture(count)
@@ -437,12 +438,16 @@ def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
     params[1:-1:2] = hanle_curve_fit_params['inv_hwhm']
     params[-1] = hanle_curve_fit_params['offset']
 
-    ax2.plot(hanle_curve_data.Field, [model(x, *params) for x in hanle_curve_data.Field],
+    ax2.plot(field_grid, [model(x, *params) for x in field_grid],
              color=sb.xkcd_rgb['tomato red'], linewidth=3)
+    print(np.array([model(x, *params) for x in dm.Field.mean()]).flatten().shape)
+    print(np.array(dm.FR.mean()).shape)
+    ax2.plot(dm.Field.mean(), 10*(np.array([model(x, *params) for x in dm.Field.mean()]).flatten() - dm.FR.mean()),
+             color=sb.xkcd_rgb['dark yellow'], linewidth=3)
 
     colors = [sb.xkcd_rgb['cobalt'], sb.xkcd_rgb['azure']] + list(sb.xkcd_rgb.values())
     for i in range(0, count):
-        ax2.plot(hanle_curve_data.Field, [lorentzian(x, *[params[0+2*i], params[1+2*i], 0, 0]) for x in hanle_curve_data.Field],
+        ax2.plot(field_grid, [lorentzian(x, *[params[0+2*i], params[1+2*i], 0, 0]) for x in field_grid],
                  color=colors[i], linewidth=2, label=('peak %d' % (i+1)))
 
     ax2.set_yticklabels(ax2.get_yticks()/1e-6)
@@ -494,3 +499,59 @@ def hanle_fit_for_data(hanle_curve_data, db_conn):
         'when': when,
         'when_end': when_end
     })
+
+def get_hanle_params(query, con):
+    samples = con.spin_optics.samples
+    hanle_curve_fits = con.spin_optics.hanle_curve_fits
+    fits = hanle_curve_fits.find(query)
+    es = np.zeros(fits.count())
+    amps1 = np.zeros(fits.count())
+    amps2 = np.zeros(fits.count())
+    l1 = np.zeros(fits.count())
+    l2 = np.zeros(fits.count())
+    pi = np.zeros(fits.count())
+    offset = np.zeros(fits.count())
+    fixed = np.zeros(fits.count())
+    background = np.zeros(fits.count())
+
+    constrained = False
+    for fit, i in zip(fits, range(0, fits.count())):
+        es[i] = fit['probe_energy']
+        amps1[i] = fit['amplitude'][0]
+        l1[i] = fit['inv_hwhm'][0]
+        if len(fit['amplitude']) < 2:
+            amps2[i] = 0
+            l1[i] = 0
+        else:
+            amps2[i] = fit['amplitude'][1]
+            l2[i] = fit['inv_hwhm'][1]
+        pi[i] = fit['probe_intensity']
+        offset[i] = fit['offset']
+        background[i] = fit['probe_background']
+        if 'constrained_offset' in fit.keys():
+            constrained = True
+            fixed[i] = fit['constrained_offset']
+    pmt = np.argsort(es)
+    es = es[pmt]
+    amps1 = amps1[pmt]
+    amps2 = amps2[pmt]
+    l1 = l1[pmt]
+    l2 = l2[pmt]
+    pi = pi[pmt]
+    offset = offset[pmt]
+
+
+    result = {
+        'es': es,
+        'amps1': amps1,
+        'amps2': amps2,
+        'l1': l1,
+        'l2': l2,
+        'pi': pi,
+        'offset': offset,
+        'background': background
+    }
+    if constrained:
+        fixed = fixed[pmt]
+        result.update({'fixed': fixed})
+    return result
