@@ -231,12 +231,11 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
     init_p[1::2] = inv_hwhm_init
 
     # Create scalers to give data zero mean and unit standard deviation
-    scaler_Field = StandardScaler().fit(field_data)
-    scaler_FR = StandardScaler().fit(faraday_rotation_data)
+    scaler_Field = StandardScaler().fit(field_data.reshape(-1, 1))
+    scaler_FR = StandardScaler().fit(faraday_rotation_data.reshape(-1, 1))
 
-    field = scaler_Field.transform(field_data)
-    fr = scaler_FR.transform(faraday_rotation_data)
-
+    field = scaler_Field.transform(field_data.reshape(-1, 1))
+    fr = scaler_FR.transform(faraday_rotation_data.reshape(-1, 1))
 
     cost_func_kwargs = {}
     if measured_offset is not None:
@@ -246,7 +245,7 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
     if regularization is not None:
         cost_func_kwargs['regularization'] = regularization
 
-    p = global_curve_fit(model, field, fr, init_p, basinhopping_kwargs={
+    p = global_curve_fit(model, field.flatten(), fr.flatten(), init_p, basinhopping_kwargs={
         'niter': niter,
         'stepsize': stepsize,
         'T': T
@@ -255,7 +254,7 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
     # Extract the parameters from the solution, and rescale the background
     if constant_offset is None:
         amplitudes_opt = p.x[:-1:2]
-        offset_opt = p.x[-1]*scaler_FR.std_ + scaler_FR.mean_
+        offset_opt = p.x[-1]*scaler_FR.scale_[0] + scaler_FR.mean_[0]
     else:
         amplitudes_opt = p.x[::2]
         offset_opt = constant_offset
@@ -267,8 +266,8 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
     amplitudes_opt = amplitudes_opt[permute]
 
     # Remove the scaling from the parameters so they are in the units of the source data
-    amplitudes_opt = amplitudes_opt*scaler_FR.std_
-    inv_hwhm_opt = inv_hwhm_opt/scaler_Field.std_
+    amplitudes_opt = amplitudes_opt*scaler_FR.scale_[0]
+    inv_hwhm_opt = inv_hwhm_opt/scaler_Field.scale_[0]
 
     return {"amplitude": amplitudes_opt,
             "inv_hwhm" : inv_hwhm_opt,
@@ -440,8 +439,7 @@ def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
 
     ax2.plot(field_grid, [model(x, *params) for x in field_grid],
              color=sb.xkcd_rgb['tomato red'], linewidth=3)
-    print(np.array([model(x, *params) for x in dm.Field.mean()]).flatten().shape)
-    print(np.array(dm.FR.mean()).shape)
+
     ax2.plot(dm.Field.mean(), 10*(np.array([model(x, *params) for x in dm.Field.mean()]).flatten() - dm.FR.mean()),
              color=sb.xkcd_rgb['dark yellow'], linewidth=3)
 
@@ -555,3 +553,4 @@ def get_hanle_params(query, con):
         fixed = fixed[pmt]
         result.update({'fixed': fixed})
     return result
+
