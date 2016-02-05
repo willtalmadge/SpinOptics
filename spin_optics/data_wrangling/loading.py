@@ -1,7 +1,6 @@
-from pandas import read_csv
-
-from spin_optics.data_wrangling.file_identification import *
-
+from spin_optics import ureg
+import pint
+from inspect import signature
 
 def data_for_value(data, value, column_name, loader, key_name='Timestamp'):
     """
@@ -21,3 +20,42 @@ def data_for_value(data, value, column_name, loader, key_name='Timestamp'):
             d = loader(r[key_name])
             result = result.append(d)
     return result
+
+def parse_units(data: dict) -> dict:
+    """
+    Take a dictionary as input and try to parse each string field into a pint value with units.
+
+    :param data: A dictionary that may have strings with dimensional values ie '1.2 volts'
+    :return: A dictionary with all parsable fields converted to pint units
+    """
+
+    result = {}
+    for key, value in data.items():
+        if isinstance(value, str):
+            try:
+                result[key] = ureg(value)
+            except pint.UndefinedUnitError:
+                result[key] = value
+        else:
+            result[key] = value
+
+    return result
+
+
+def expand_kwargs(func, values):
+    """
+    Given a function and dictionary, select a subset from the dictionary of values that will be accepted
+    as kwargs by func.
+
+    For this to have any effect, func must have arg names that identically match keys in values.
+    If values does not supply all the args to func, the rest must be provided at the call site.
+
+    :param func:
+    :param values:
+    :return:
+    """
+    args = set(signature(func).parameters.keys())
+    keys = set(values.keys())
+    passable_keys = args & keys
+
+    return {key:value for key,value in values.items() if key in passable_keys}

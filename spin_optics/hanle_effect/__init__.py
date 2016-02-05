@@ -239,7 +239,7 @@ def global_hanle_curve_fit(field_data, faraday_rotation_data, lorentzian_count,
 
     cost_func_kwargs = {}
     if measured_offset is not None:
-        measured_offset = scaler_FR.transform(np.array([measured_offset]))[0]
+        measured_offset = scaler_FR.transform(np.array([measured_offset]).reshape(-1, 1))[0]
         print("using a measured offset penalty for scaled offset %f" % measured_offset)
         cost_func_kwargs['measured_offset'] = measured_offset
     if regularization is not None:
@@ -288,6 +288,42 @@ def store_hanle_curve_fit(sample_id,
                           additional_params=None,
                           db_conn=None,
                           rms_filter=True):
+    """
+    Store a Hanle curve fit with expected parameters broken out as function arguments.
+
+    This function checks for existing records by querying a mongodb database for the following
+    document:
+    doc = {
+        'sample_id': sample_id,
+        'sample_temperature': trunc(sample_temperature.to(ureg.kelvin).magnitude),
+        'probe_energy': trunc(probe_energy.to(ureg.eV).magnitude),
+        'probe_intensity': trunc(probe_intensity.to(ureg.watts).magnitude),
+        'pump_energy': trunc(pump_energy.to(ureg.eV).magnitude),
+        'pump_intensity': trunc(pump_intensity.to(ureg.watts).magnitude),
+        'when': when,
+        'when_end': when_end
+    }
+
+    If additional_query_params is provided, it will be appended to the query. Additional params will
+    be written to the database, but not included in the query. additional_params is useful for
+    attaching data to the fit that isn't going to be queried against.
+
+    :param sample_id:
+    :param sample_temperature:
+    :param probe_energy:
+    :param probe_intensity:
+    :param pump_energy:
+    :param pump_intensity:
+    :param hanle_model_params:
+    :param when:
+    :param when_end:
+    :param probe_background:
+    :param additional_query_params:
+    :param additional_params:
+    :param db_conn:
+    :param rms_filter:
+    :return:
+    """
 
     if (when.tzinfo is not pytz.UTC) or (when_end.tzinfo is not pytz.UTC):
         raise ValueError("When should be a datetime with a tzinfo of pytz.UTC")
@@ -382,7 +418,7 @@ def update_hanle(sample_id,
         measured_offset = None
 
     p = global_hanle_curve_fit(data.Field.values, data.FR.values, peaks, stepsize=500,
-                               T=200, niter=100, regularization=regularization,
+                               T=500, niter=100, regularization=regularization,
                               measured_offset=measured_offset)
 
     total_amp = sum(p['amplitude'])

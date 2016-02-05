@@ -53,11 +53,7 @@ def data_path(year, month, day):
     :return: The full path to the data folder
     """
     if os.path.exists(os.path.expanduser('~/Google Drive/Spin Optics/Data')):
-        # Handle the case where this is run on the main data acquisition system
         dir = os.path.expanduser('~/Google Drive/Spin Optics/Data/%04d/%02d/%02d' % (year, month, day))
-    elif os.path.exists(os.path.expanduser('~/Google Drive/Spin Optics Data')):
-        # Handle the case where this is run on a system where the data folder is shared
-        dir = os.path.expanduser('~/Google Drive/Spin Optics Data/%04d/%02d/%02d' % (year, month, day))
     else:
         raise FileNotFoundError('Could not locate the spin optics data path')
 
@@ -107,6 +103,12 @@ class measurement_types(Enum):
     hanle_effect='Hanle Effect'
     photoluminescence_spectroscopy='Photoluminescence Spectroscopy'
 
+def experiments_base_path(*path_append):
+    base = os.path.expanduser('~/Google Drive/Spin Optics/Experiments')
+    if len(path_append) > 0:
+        return os.path.join(base, *path_append)
+    return base
+
 def experiment_path(sample_id, measurement, name, eid, sample_name=None):
     """
     Returns a path to a folder where experiment related data can be stored. The experiment
@@ -122,7 +124,7 @@ def experiment_path(sample_id, measurement, name, eid, sample_name=None):
         sample_name = ''
     else:
         sample_name = sample_name + ' '
-    path = os.path.expanduser('~/Google Drive/Spin Optics/Experiments')
+    path = experiments_base_path()
     if os.path.exists(path):
         path = os.path.join(path, eid + ' ' + sample_name + sample_id, measurement.value, eid + ' ' + name)
     else:
@@ -130,3 +132,4 @@ def experiment_path(sample_id, measurement, name, eid, sample_name=None):
     if not os.path.exists(path):
         os.makedirs(path)
     return path
+

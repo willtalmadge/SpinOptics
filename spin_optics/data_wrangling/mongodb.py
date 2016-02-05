@@ -26,7 +26,16 @@ def field_dataframe(cursor, fields):
     for doc in list(cursor):
         for field in fields:
             try:
-                data_dict[field].append(doc[field])
+                value = doc[field]
+                if isinstance(value, list):
+                    for i, v in enumerate(value):
+                        if (field + '_' + str(i)) not in data_dict.keys():
+                            if field in data_dict.keys():
+                                del data_dict[field]
+                            data_dict[field + '_' + str(i)] = []
+                        data_dict[field + '_' + str(i)].append(v)
+                else:
+                    data_dict[field].append(doc[field])
             except Exception:
                 data_dict[field].append(np.nan)
 
