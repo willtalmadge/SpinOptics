@@ -1,10 +1,11 @@
 from spin_optics.fitting import progressive_fit, global_curve_fit
 from spin_optics.unit_converters import hanle_lifetime_gauss_in_sec
-from pandas import *
 from spin_optics.models import double_lorentzian_centered_no_off, centered_lorentzian_mixture, lorentzian
-from spin_optics.data_wrangling import filename_containing_string_in_dirs, filename_containing_string
+from spin_optics.data_wrangling import filename_containing_string_in_dirs, expand_kwargs, field_dataframe, experiment_path, measurement_types
 from spin_optics.plotting import double_lorentzian_fig
 from spin_optics.unit_converters import energy_ev
+
+from pandas import *
 
 from sklearn.preprocessing import StandardScaler
 from multiprocessing import Pool
@@ -16,7 +17,7 @@ import scipy.optimize as opt
 
 from pymongo import MongoClient
 
-from spin_optics import ureg, Q_
+from spin_optics import ureg as U_, Q_
 from functools import partial
 
 from spin_optics.misc import trunc
@@ -24,6 +25,7 @@ from spin_optics.misc import trunc
 import pytz
 import time
 import dateutil
+import os.path
 
 """
 Goal is to split this into two phases, generate the hanle parameters and potentially cache or aggregate
@@ -342,15 +344,15 @@ def store_hanle_curve_fit(sample_id,
     if additional_params is None:
         additional_params = {}
     if probe_background is not None:
-        additional_params.update({'probe_background': trunc(probe_background.to(ureg.radian).magnitude)})
+        additional_params.update({'probe_background': trunc(probe_background.to(U_.radian).magnitude)})
 
     doc = {
         'sample_id': sample_id,
-        'sample_temperature': trunc(sample_temperature.to(ureg.kelvin).magnitude),
-        'probe_energy': trunc(probe_energy.to(ureg.eV).magnitude),
-        'probe_intensity': trunc(probe_intensity.to(ureg.watts).magnitude),
-        'pump_energy': trunc(pump_energy.to(ureg.eV).magnitude),
-        'pump_intensity': trunc(pump_intensity.to(ureg.watts).magnitude),
+        'sample_temperature': trunc(sample_temperature.to(U_.kelvin).magnitude),
+        'probe_energy': trunc(probe_energy.to(U_.eV).magnitude),
+        'probe_intensity': trunc(probe_intensity.to(U_.watts).magnitude),
+        'pump_energy': trunc(pump_energy.to(U_.eV).magnitude),
+        'pump_intensity': trunc(pump_intensity.to(U_.watts).magnitude),
         'when': when,
         'when_end': when_end
     }
@@ -399,7 +401,7 @@ def update_hanle(sample_id,
     if additional_params is None:
         additional_params = {}
     additional_params.update({
-            'mbr_brf_displacement': mbr_brf_displacement.to(ureg.millimeters).magnitude
+            'mbr_brf_displacement': mbr_brf_displacement.to(U_.millimeters).magnitude
         })
     additional_params.update(additional_params)
 
@@ -437,9 +439,9 @@ def update_hanle(sample_id,
     result = store_hanle_curve_fit(
         sample_id=sample_id,
         sample_temperature=temperature,
-        probe_energy=energy_ev(wavelength.to(ureg.nanometers).magnitude) * ureg.eV,
+        probe_energy=energy_ev(wavelength.to(U_.nanometers).magnitude) * U_.eV,
         probe_intensity=probe_intensity,
-        pump_energy=energy_ev(pump_wavelength.to(ureg.nanometers).magnitude) * ureg.eV,
+        pump_energy=energy_ev(pump_wavelength.to(U_.nanometers).magnitude) * U_.eV,
         pump_intensity=pump_intensity,
         when=when,
         when_end=when_end,
@@ -590,3 +592,57 @@ def get_hanle_params(query, con):
         result.update({'fixed': fixed})
     return result
 
+
+def fit_energy_dependence(data, envir, curve_loader, db_conn,
+                          constrained_background=False,
+                          retries=10,
+                          rms_filter=True):
+    for s, t, w, pp, z, bg in zip(data.Timestamp.values,
+                           data.temperature_start.values,
+                           data.W.values, data.PP, data.Z.values, data.BG.values):
+        curve = curve_loader(s)
+        for i in range(0, retries):
+            result = update_hanle(
+                data=curve,
+                temperature=t*U_.kelvin,
+                wavelength=w*U_.nanometer,
+                probe_intensity=pp*U_.watt,
+                mbr_brf_displacement=z*U_.millimeter,
+                probe_background=bg*U_.radian,
+                constrain_background= False,
+                rms_filter=rms_filter,
+                db_conn=db_conn,
+                **expand_kwargs(update_hanle, envir)
+            )
+            print(result)
+            if result is not None:
+                print('Found better fit, updating db')
+            else:
+                print('Fit not updated')
+
+    def report(self):
+        pass
+
+def hanle_exp_dir(envir):
+    exp_dir = experiment_path(envir['sample_id'], measurement_types.hanle_effect,
+                          envir['additional_params']['experiment'], envir['eid'],
+                         sample_name=envir['sample_description'])
+    return exp_dir
+
+def plot_lifetime_for_energy_dependence(db_conn, query, exp_dir, envir, title):
+    hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
+    fits = field_dataframe(hanle_curve_fits.find(query),
+                       ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'capping', 'pump_intensity'])
+    print(fits)
+    fig, ax = plt.subplots()
+    plt.plot(fits['probe_energy'],
+                                    hanle_lifetime_gauss_in_sec(fits['inv_hwhm_0'],g=0.33), '^r', label='g = 0.33')
+    plt.plot(fits['probe_energy'],
+                                    hanle_lifetime_gauss_in_sec(fits['inv_hwhm_1'],g=2.7), 'ok', label='g = 2.7')
+
+    ax.set_yticklabels(ax.get_yticks()/1e-9);
+    plt.xlabel('Temperature (Kelvin)')
+    plt.ylabel('Lifetime (ns)')
+    plt.title(title)
+    plt.legend()
+    plt.savefig(os.path.join(exp_dir, envir['eid'] + ' lifetime vs. energy.pdf'))
