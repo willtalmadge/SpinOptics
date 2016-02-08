@@ -1,6 +1,12 @@
 from pymongo import MongoClient
 import numpy as np
 import pandas as pd
+from spin_optics.misc import spinoptics_settings
+
+def spinoptics_connection():
+    settings = spinoptics_settings()
+    connection = MongoClient(settings['mongodb_connection'])
+    return connection
 
 def collection_fields(cursor):
     """

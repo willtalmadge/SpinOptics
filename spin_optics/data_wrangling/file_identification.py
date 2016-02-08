@@ -133,3 +133,8 @@ def experiment_path(sample_id, measurement, name, eid, sample_name=None):
         os.makedirs(path)
     return path
 
+def exp_dir_from_env(envir):
+    path = experiment_path(envir['sample_id'], measurement_types.hanle_effect,
+                          envir['additional_params']['experiment'], envir['eid'],
+                         sample_name=envir['sample_description'])
+    return path

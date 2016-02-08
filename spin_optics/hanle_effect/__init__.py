@@ -641,8 +641,28 @@ def plot_lifetime_for_energy_dependence(db_conn, query, exp_dir, envir, title):
                                     hanle_lifetime_gauss_in_sec(fits['inv_hwhm_1'],g=2.7), 'ok', label='g = 2.7')
 
     ax.set_yticklabels(ax.get_yticks()/1e-9);
-    plt.xlabel('Temperature (Kelvin)')
+    plt.xlabel('Energy (eV)')
     plt.ylabel('Lifetime (ns)')
     plt.title(title)
     plt.legend()
     plt.savefig(os.path.join(exp_dir, envir['eid'] + ' lifetime vs. energy.pdf'))
+
+def plot_lifetime_for_temperature_dependence(db_conn, query, exp_dir, envir, title):
+    hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
+    fits = field_dataframe(hanle_curve_fits.find(query),
+                       ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'capping', 'pump_intensity'])
+    print(fits)
+    fig, ax = plt.subplots()
+    plt.plot(fits['probe_energy'], fits['amplitude_0'], '^r', label='g = 0.33')
+    plt.plot(fits['probe_energy'], fits['amplitude_1'], 'ok', label='g = 2.7')
+
+    ax.set_yticklabels(ax.get_yticks()/1e-6);
+    plt.xlabel('Energy (eV)')
+    plt.ylabel('Amplitude ($\mu rad$)')
+    plt.title(title)
+    plt.legend()
+    plt.savefig(os.path.join(exp_dir, envir['eid'] + ' lifetime vs. energy.pdf'))
+
+def drop_fit_for_curve(curve, db_conn):
+    doc = hanle_fit_for_data(curve, db_conn)
+    return db_conn.spin_optics.hanle_curve_fits.delete_one(doc)
