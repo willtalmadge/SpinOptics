@@ -11,6 +11,7 @@ def filename_contains_string(string, filename):
     """
     return re.search('.*' + string + '.*', filename) is not None
 
+
 def filename_containing_string(string, directory='.'):
     """
     Find a list of file paths containing the specified string in the specified directory
@@ -28,6 +29,7 @@ def filename_containing_string(string, directory='.'):
     else:
         return ''
 
+
 def filename_containing_string_in_dirs(sub_string, search_dirs=['.']):
     """
     Find a list of file paths containing the specified string, searching in the specified subdirectories
@@ -42,6 +44,7 @@ def filename_containing_string_in_dirs(sub_string, search_dirs=['.']):
             if filename != '':
                 return filename
     return filename
+
 
 def data_path(year, month, day):
     """
@@ -62,6 +65,7 @@ def data_path(year, month, day):
     else:
         return None
 
+
 def count_files_in_dir(path):
     """
     Count how many files are in a directory, not including the folders
@@ -76,6 +80,7 @@ def count_files_in_dir(path):
             os.path.isfile(os.path.join(path, name)) and name != 'Icon\r')])
     else:
         return None
+
 
 def date_id(year, month, day, hour=None, minute=None, second=None):
     """
@@ -99,15 +104,18 @@ def date_id(year, month, day, hour=None, minute=None, second=None):
         did += '%02d' % second
     return did
 
+
 class measurement_types(Enum):
     hanle_effect='Hanle Effect'
     photoluminescence_spectroscopy='Photoluminescence Spectroscopy'
+
 
 def experiments_base_path(*path_append):
     base = os.path.expanduser('~/Google Drive/Spin Optics/Experiments')
     if len(path_append) > 0:
         return os.path.join(base, *path_append)
     return base
+
 
 def experiment_path(sample_id, measurement, name, eid, sample_name=None):
     """
@@ -126,12 +134,13 @@ def experiment_path(sample_id, measurement, name, eid, sample_name=None):
         sample_name = sample_name + ' '
     path = experiments_base_path()
     if os.path.exists(path):
-        path = os.path.join(path, eid + ' ' + sample_name + sample_id, measurement.value, eid + ' ' + name)
+        path = os.path.join(path, sample_name + sample_id, measurement.value, eid + ' ' + name)
     else:
         raise FileNotFoundError('Could not locate the spin optics data path')
     if not os.path.exists(path):
         os.makedirs(path)
     return path
+
 
 def exp_dir_from_env(envir):
     path = experiment_path(envir['sample_id'], measurement_types.hanle_effect,

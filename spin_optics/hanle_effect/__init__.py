@@ -1,7 +1,7 @@
 from spin_optics.fitting import progressive_fit, global_curve_fit
 from spin_optics.unit_converters import hanle_lifetime_gauss_in_sec
 from spin_optics.models import double_lorentzian_centered_no_off, centered_lorentzian_mixture, lorentzian
-from spin_optics.data_wrangling import filename_containing_string_in_dirs, expand_kwargs, field_dataframe, experiment_path, measurement_types
+from spin_optics.data_wrangling import filename_containing_string_in_dirs, expand_kwargs, field_dataframe, experiment_path, measurement_types, exp_dir_from_env
 from spin_optics.plotting import double_lorentzian_fig
 from spin_optics.unit_converters import energy_ev
 
@@ -391,8 +391,8 @@ def update_hanle(sample_id,
                  probe_intensity,
                  pump_wavelength,
                  pump_intensity,
-                 mbr_brf_displacement,
-                 probe_background,
+                 mbr_brf_displacement=None,
+                 probe_background=None,
                  constrain_background=False,
                  regularization=None, peaks=2, rms_filter=True,
                  additional_params=None,
@@ -400,9 +400,10 @@ def update_hanle(sample_id,
 
     if additional_params is None:
         additional_params = {}
-    additional_params.update({
-            'mbr_brf_displacement': mbr_brf_displacement.to(U_.millimeters).magnitude
-        })
+    if mbr_brf_displacement is not None:
+        additional_params.update({
+                'mbr_brf_displacement': mbr_brf_displacement.to(U_.millimeters).magnitude
+            })
     additional_params.update(additional_params)
 
     additional_query_params = {}
@@ -460,13 +461,15 @@ def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
     f2, ax2 = plt.subplots()
 
     # Plot the data
-    ax2.plot(hanle_curve_data.Field, hanle_curve_data.FR, 'o', color=sb.xkcd_rgb['black'], rasterized=True, alpha=0.3)
+    ax2.plot(hanle_curve_data.Field, hanle_curve_data.FR, 'o',
+             color=sb.xkcd_rgb['black'], rasterized=True, alpha=0.3, label='Raw Data')
 
     # Plot the curve mean
     dm = hanle_curve_data.groupby('Field')
-    ax2.plot(dm.Field.mean(), dm.FR.mean(), '-o', color=sb.xkcd_rgb['mango'], alpha=0.5, markersize=4)
+    ax2.plot(dm.Field.mean(), dm.FR.mean(), '-o', color=sb.xkcd_rgb['mango'], alpha=0.5, markersize=4, label='Average')
 
     field_grid = np.linspace(np.min(hanle_curve_data.Field), np.max(hanle_curve_data.Field), 1000)
+
     # Plot the multiple lorentzian
     count = len(list(hanle_curve_fit_params['amplitude']))
     model = centered_lorentzian_mixture(count)
@@ -475,11 +478,11 @@ def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
     params[1:-1:2] = hanle_curve_fit_params['inv_hwhm']
     params[-1] = hanle_curve_fit_params['offset']
 
-    ax2.plot(field_grid, [model(x, *params) for x in field_grid],
-             color=sb.xkcd_rgb['tomato red'], linewidth=3)
-
     ax2.plot(dm.Field.mean(), 10*(np.array([model(x, *params) for x in dm.Field.mean()]).flatten() - dm.FR.mean()),
-             color=sb.xkcd_rgb['dark yellow'], linewidth=3)
+             color=sb.xkcd_rgb['dark yellow'], linewidth=3, label='Residual (10x)')
+
+    ax2.plot(field_grid, [model(x, *params) for x in field_grid],
+             color=sb.xkcd_rgb['tomato red'], linewidth=3, label='Fit')
 
     colors = [sb.xkcd_rgb['cobalt'], sb.xkcd_rgb['azure']] + list(sb.xkcd_rgb.values())
     for i in range(0, count):
@@ -620,14 +623,77 @@ def fit_energy_dependence(data, envir, curve_loader, db_conn,
             else:
                 print('Fit not updated')
 
-    def report(self):
-        pass
+def fit_power_dependence(data, envir, curve_loader, db_conn,
+                          constrained_background=False,
+                          retries=10,
+                          rms_filter=True):
+    for s, t, w, pup in zip(data.Timestamp.values,
+                           data.temperature_start.values,
+                           data.W.values, data.PuP):
+        curve = curve_loader(s)
+        for i in range(0, retries):
+            result = update_hanle(
+                data=curve,
+                temperature=t*U_.kelvin,
+                wavelength=w*U_.nanometer,
+                pump_intensity=pup*U_.watts,
+                constrain_background= False,
+                rms_filter=rms_filter,
+                db_conn=db_conn,
+                **expand_kwargs(update_hanle, envir)
+            )
+            print(result)
+            if result is not None:
+                print('Found better fit, updating db')
+            else:
+                print('Fit not updated')
 
 def hanle_exp_dir(envir):
     exp_dir = experiment_path(envir['sample_id'], measurement_types.hanle_effect,
                           envir['additional_params']['experiment'], envir['eid'],
                          sample_name=envir['sample_description'])
     return exp_dir
+
+# TODO: refactor this metal halide perovskite specific code into its own file
+
+def plot_hanle_fits_for_energy_dependence(data, envir, curve_loader, fit_plot_filename, db_conn, constrain_background=False):
+    exp_dir = exp_dir_from_env(envir)
+    fit_plots_dir = os.path.join(exp_dir, 'fit_plots')
+    if not os.path.exists(fit_plots_dir):
+        os.makedirs(fit_plots_dir)
+
+    for s, w, pp, z, bg in zip(data.Timestamp.values,
+                       data.W.values, data.PP, data.Z.values, data.BG.values):
+        curve = curve_loader(s)
+        result = hanle_fit_for_data(curve, db_conn)
+        if result is not None:
+            plot_hanle_curve(curve, result)
+            #title(hanle_curve_title_from_stored(curve_id))
+            if not constrain_background:
+                plt.savefig(os.path.join(fit_plots_dir, fit_plot_filename(s, w)))
+            else:
+                if not os.path.exists(os.path.join(fit_plots_dir, 'constrained_bg')):
+                    os.path.makedirs(os.path.join(fit_plots_dir, 'constrained_bg'))
+                plt.savefig(os.path.exists(os.path.join(fit_plots_dir, 'constrained_bg', '%04d.pdf' % s)))
+            plt.close()
+
+
+def plot_hanle_fits_for_power_dependence(data, envir, curve_loader, fit_plot_filename, db_conn, constrain_background=False):
+    exp_dir = exp_dir_from_env(envir)
+    fit_plots_dir = os.path.join(exp_dir, 'fit_plots')
+    if not os.path.exists(fit_plots_dir):
+        os.makedirs(fit_plots_dir)
+
+    for s, w, pup in zip(data.Timestamp.values,
+                       data.W.values, data.PuP):
+        curve = curve_loader(s)
+        result = hanle_fit_for_data(curve, db_conn)
+        if result is not None:
+            plot_hanle_curve(curve, result)
+            #title(hanle_curve_title_from_stored(curve_id))
+            plt.savefig(os.path.join(fit_plots_dir, fit_plot_filename(s, w)))
+
+            plt.close()
 
 def plot_lifetime_for_energy_dependence(db_conn, query, exp_dir, envir, title):
     hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
@@ -647,7 +713,7 @@ def plot_lifetime_for_energy_dependence(db_conn, query, exp_dir, envir, title):
     plt.legend()
     plt.savefig(os.path.join(exp_dir, envir['eid'] + ' lifetime vs. energy.pdf'))
 
-def plot_lifetime_for_temperature_dependence(db_conn, query, exp_dir, envir, title):
+def plot_amplitude_for_energy_dependence(db_conn, query, exp_dir, envir, title):
     hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
     fits = field_dataframe(hanle_curve_fits.find(query),
                        ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'capping', 'pump_intensity'])
@@ -661,7 +727,7 @@ def plot_lifetime_for_temperature_dependence(db_conn, query, exp_dir, envir, tit
     plt.ylabel('Amplitude ($\mu rad$)')
     plt.title(title)
     plt.legend()
-    plt.savefig(os.path.join(exp_dir, envir['eid'] + ' lifetime vs. energy.pdf'))
+    plt.savefig(os.path.join(exp_dir, envir['eid'] + ' amplitude vs. energy.pdf'))
 
 def drop_fit_for_curve(curve, db_conn):
     doc = hanle_fit_for_data(curve, db_conn)
