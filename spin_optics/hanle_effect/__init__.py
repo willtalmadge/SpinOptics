@@ -713,6 +713,25 @@ def plot_lifetime_for_energy_dependence(db_conn, query, exp_dir, envir, title):
     plt.legend()
     plt.savefig(os.path.join(exp_dir, envir['eid'] + ' lifetime vs. energy.pdf'))
 
+def plot_lifetime_for_power_dependence(db_conn, query, exp_dir, envir, title):
+    hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
+    fits = field_dataframe(hanle_curve_fits.find(query),
+                       ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'capping', 'pump_intensity'])
+    print(fits)
+    fig, ax = plt.subplots()
+    plt.plot(fits['pump_intensity'],
+                                    hanle_lifetime_gauss_in_sec(fits['inv_hwhm_0'],g=0.33), '^r', label='g = 0.33')
+    plt.plot(fits['pump_intensity'],
+                                    hanle_lifetime_gauss_in_sec(fits['inv_hwhm_1'],g=2.7), 'ok', label='g = 2.7')
+
+    ax.set_yticklabels(ax.get_yticks()/1e-9);
+    ax.set_xticklabels(ax.get_xticks()/1e-3)
+    plt.xlabel('Pump Intensity (milliwatts)')
+    plt.ylabel('Lifetime (ns)')
+    plt.title(title)
+    plt.legend()
+    plt.savefig(os.path.join(exp_dir, envir['eid'] + ' lifetime vs. pump power.pdf'))
+
 def plot_amplitude_for_energy_dependence(db_conn, query, exp_dir, envir, title):
     hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
     fits = field_dataframe(hanle_curve_fits.find(query),
@@ -728,6 +747,23 @@ def plot_amplitude_for_energy_dependence(db_conn, query, exp_dir, envir, title):
     plt.title(title)
     plt.legend()
     plt.savefig(os.path.join(exp_dir, envir['eid'] + ' amplitude vs. energy.pdf'))
+
+def plot_amplitude_for_power_dependence(db_conn, query, exp_dir, envir, title):
+    hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
+    fits = field_dataframe(hanle_curve_fits.find(query),
+                       ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'capping', 'pump_intensity'])
+    print(fits)
+    fig, ax = plt.subplots()
+    plt.plot(fits['pump_intensity'], fits['amplitude_0'], '^r', label='g = 0.33')
+    plt.plot(fits['pump_intensity'], fits['amplitude_1'], 'ok', label='g = 2.7')
+
+    ax.set_yticklabels(ax.get_yticks()/1e-6)
+    ax.set_xticklabels(ax.get_xticks()/1e-3)
+    plt.xlabel('Pump Intensity (milliwatts)')
+    plt.ylabel('Amplitude ($\mu rad$)')
+    plt.title(title)
+    plt.legend()
+    plt.savefig(os.path.join(exp_dir, envir['eid'] + ' amplitude vs. pump power.pdf'))
 
 def drop_fit_for_curve(curve, db_conn):
     doc = hanle_fit_for_data(curve, db_conn)
