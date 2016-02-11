@@ -26,6 +26,7 @@ import pytz
 import time
 import dateutil
 import os.path
+import re
 
 """
 Goal is to split this into two phases, generate the hanle parameters and potentially cache or aggregate
@@ -654,8 +655,30 @@ def hanle_exp_dir(envir):
                          sample_name=envir['sample_description'])
     return exp_dir
 
-# TODO: refactor this metal halide perovskite specific code into its own file
 
+def get_units(db_conn):
+    return db_conn.spin_optics.hanle_curve_fits.units.find_one()
+
+
+def dimension_column_labels(labels, db_conn):
+    """
+    Take a list of column labels and try to match them up with the correct units in the hanle_curve_fits_collection
+    :param labels:
+    :param db_conn:
+    :return:
+    """
+    units = get_units(db_conn)
+    results = []
+    for label in labels:
+        m = re.search('([a-zA-Z_]+?)_{0,1}([0-9]*)$', label)
+        try:
+            results.append(label + ' (' + units[m.group(1)] + ')')
+        except (KeyError, AttributeError):
+            results.append(label)
+
+    return results
+
+# TODO: refactor this metal halide perovskite specific code into its own file
 def plot_hanle_fits_for_energy_dependence(data, envir, curve_loader, fit_plot_filename, db_conn, constrain_background=False):
     exp_dir = exp_dir_from_env(envir)
     fit_plots_dir = os.path.join(exp_dir, 'fit_plots')
@@ -697,14 +720,11 @@ def plot_hanle_fits_for_power_dependence(data, envir, curve_loader, fit_plot_fil
 
 def plot_lifetime_for_energy_dependence(db_conn, query, exp_dir, envir, title):
     hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
-    fits = field_dataframe(hanle_curve_fits.find(query),
-                       ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'capping', 'pump_intensity'])
-    print(fits)
+    query_vars = ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'pump_intensity']
+    fits = field_dataframe(hanle_curve_fits.find(query), query_vars)
     fig, ax = plt.subplots()
-    plt.plot(fits['probe_energy'],
-                                    hanle_lifetime_gauss_in_sec(fits['inv_hwhm_0'],g=0.33), '^r', label='g = 0.33')
-    plt.plot(fits['probe_energy'],
-                                    hanle_lifetime_gauss_in_sec(fits['inv_hwhm_1'],g=2.7), 'ok', label='g = 2.7')
+    plt.plot(fits['probe_energy'], hanle_lifetime_gauss_in_sec(fits['inv_hwhm_0'],g=0.33), '^r', label='g = 0.33')
+    plt.plot(fits['probe_energy'], hanle_lifetime_gauss_in_sec(fits['inv_hwhm_1'],g=2.7), 'ok', label='g = 2.7')
 
     ax.set_yticklabels(ax.get_yticks()/1e-9);
     plt.xlabel('Energy (eV)')
@@ -713,16 +733,20 @@ def plot_lifetime_for_energy_dependence(db_conn, query, exp_dir, envir, title):
     plt.legend()
     plt.savefig(os.path.join(exp_dir, envir['eid'] + ' lifetime vs. energy.pdf'))
 
+    fits['lifetime_0_0.33 (sec)'] = hanle_lifetime_gauss_in_sec(fits['inv_hwhm_0'],g=0.33)
+    fits['lifetime_1_2.7 (sec)'] = hanle_lifetime_gauss_in_sec(fits['inv_hwhm_1'],g=2.7)
+    fits.columns=dimension_column_labels(fits.columns, db_conn)
+
+    fits.to_csv(os.path.join(exp_dir, envir['eid'] + ' data vs. energy.csv'))
+
 def plot_lifetime_for_power_dependence(db_conn, query, exp_dir, envir, title):
     hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
-    fits = field_dataframe(hanle_curve_fits.find(query),
-                       ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'capping', 'pump_intensity'])
+    query_vars = ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'pump_intensity']
+    fits = field_dataframe(hanle_curve_fits.find(query), query_vars)
     print(fits)
     fig, ax = plt.subplots()
-    plt.plot(fits['pump_intensity'],
-                                    hanle_lifetime_gauss_in_sec(fits['inv_hwhm_0'],g=0.33), '^r', label='g = 0.33')
-    plt.plot(fits['pump_intensity'],
-                                    hanle_lifetime_gauss_in_sec(fits['inv_hwhm_1'],g=2.7), 'ok', label='g = 2.7')
+    plt.plot(fits['pump_intensity'], hanle_lifetime_gauss_in_sec(fits['inv_hwhm_0'],g=0.33), '^r', label='g = 0.33')
+    plt.plot(fits['pump_intensity'], hanle_lifetime_gauss_in_sec(fits['inv_hwhm_1'],g=2.7), 'ok', label='g = 2.7')
 
     ax.set_yticklabels(ax.get_yticks()/1e-9);
     ax.set_xticklabels(ax.get_xticks()/1e-3)
@@ -732,10 +756,16 @@ def plot_lifetime_for_power_dependence(db_conn, query, exp_dir, envir, title):
     plt.legend()
     plt.savefig(os.path.join(exp_dir, envir['eid'] + ' lifetime vs. pump power.pdf'))
 
+    fits['lifetime_0_0.33 (sec)'] = hanle_lifetime_gauss_in_sec(fits['inv_hwhm_0'],g=0.33)
+    fits['lifetime_1_2.7 (sec)'] = hanle_lifetime_gauss_in_sec(fits['inv_hwhm_1'],g=2.7)
+    fits.columns=dimension_column_labels(fits.columns, db_conn)
+
+    fits.to_csv(os.path.join(exp_dir, envir['eid'] + ' data vs. pump power.csv'))
+
 def plot_amplitude_for_energy_dependence(db_conn, query, exp_dir, envir, title):
     hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
     fits = field_dataframe(hanle_curve_fits.find(query),
-                       ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'capping', 'pump_intensity'])
+                       ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'pump_intensity'])
     print(fits)
     fig, ax = plt.subplots()
     plt.plot(fits['probe_energy'], fits['amplitude_0'], '^r', label='g = 0.33')
@@ -751,7 +781,7 @@ def plot_amplitude_for_energy_dependence(db_conn, query, exp_dir, envir, title):
 def plot_amplitude_for_power_dependence(db_conn, query, exp_dir, envir, title):
     hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
     fits = field_dataframe(hanle_curve_fits.find(query),
-                       ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'capping', 'pump_intensity'])
+                       ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'pump_intensity'])
     print(fits)
     fig, ax = plt.subplots()
     plt.plot(fits['pump_intensity'], fits['amplitude_0'], '^r', label='g = 0.33')
@@ -768,3 +798,5 @@ def plot_amplitude_for_power_dependence(db_conn, query, exp_dir, envir, title):
 def drop_fit_for_curve(curve, db_conn):
     doc = hanle_fit_for_data(curve, db_conn)
     return db_conn.spin_optics.hanle_curve_fits.delete_one(doc)
+
+
