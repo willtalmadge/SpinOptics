@@ -108,6 +108,7 @@ def date_id(year, month, day, hour=None, minute=None, second=None):
 class measurement_types(Enum):
     hanle_effect='Hanle Effect'
     photoluminescence_spectroscopy='Photoluminescence Spectroscopy'
+    transmission='Transmission'
 
 
 def experiments_base_path(*path_append):

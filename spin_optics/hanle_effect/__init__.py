@@ -458,16 +458,27 @@ def update_hanle(sample_id,
     if result['did_update']:
         return p
 
-def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
+def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params, plot_data=True, plot_mean=True,
+                     plot_residual=True):
     f2, ax2 = plt.subplots()
 
     # Plot the data
-    ax2.plot(hanle_curve_data.Field, hanle_curve_data.FR, 'o',
-             color=sb.xkcd_rgb['black'], rasterized=True, alpha=0.3, label='Raw Data')
+    if plot_data:
+        ax2.plot(hanle_curve_data.Field, hanle_curve_data.FR, 'o',
+                 color=sb.xkcd_rgb['black'], rasterized=True, alpha=0.3, label='Raw Data')
 
     # Plot the curve mean
-    dm = hanle_curve_data.groupby('Field')
-    ax2.plot(dm.Field.mean(), dm.FR.mean(), '-o', color=sb.xkcd_rgb['mango'], alpha=0.5, markersize=4, label='Average')
+    if plot_mean:
+        if plot_data:
+            color = sb.xkcd_rgb['mango']
+            label='Average'
+        else:
+            color = sb.xkcd_rgb['black']
+            label = None
+
+        dm = hanle_curve_data.groupby('Field')
+        ax2.plot(dm.Field.mean(), dm.FR.mean(), 'o', color=color,
+                 alpha=0.5, markersize=4, label=label)
 
     field_grid = np.linspace(np.min(hanle_curve_data.Field), np.max(hanle_curve_data.Field), 1000)
 
@@ -479,8 +490,9 @@ def plot_hanle_curve(hanle_curve_data, hanle_curve_fit_params):
     params[1:-1:2] = hanle_curve_fit_params['inv_hwhm']
     params[-1] = hanle_curve_fit_params['offset']
 
-    ax2.plot(dm.Field.mean(), 10*(np.array([model(x, *params) for x in dm.Field.mean()]).flatten() - dm.FR.mean()),
-             color=sb.xkcd_rgb['dark yellow'], linewidth=3, label='Residual (10x)')
+    if plot_residual:
+        ax2.plot(dm.Field.mean(), 10*(np.array([model(x, *params) for x in dm.Field.mean()]).flatten() - dm.FR.mean()),
+                 color=sb.xkcd_rgb['dark yellow'], linewidth=3, label='Residual (10x)')
 
     ax2.plot(field_grid, [model(x, *params) for x in field_grid],
              color=sb.xkcd_rgb['tomato red'], linewidth=3, label='Fit')
@@ -679,7 +691,8 @@ def dimension_column_labels(labels, db_conn):
     return results
 
 # TODO: refactor this metal halide perovskite specific code into its own file
-def plot_hanle_fits_for_energy_dependence(data, envir, curve_loader, fit_plot_filename, db_conn, constrain_background=False):
+def plot_hanle_fits_for_energy_dependence(data, envir, curve_loader, fit_plot_filename, db_conn,
+                                          constrain_background=False, **kwargs):
     exp_dir = exp_dir_from_env(envir)
     fit_plots_dir = os.path.join(exp_dir, 'fit_plots')
     if not os.path.exists(fit_plots_dir):
@@ -690,7 +703,7 @@ def plot_hanle_fits_for_energy_dependence(data, envir, curve_loader, fit_plot_fi
         curve = curve_loader(s)
         result = hanle_fit_for_data(curve, db_conn)
         if result is not None:
-            plot_hanle_curve(curve, result)
+            plot_hanle_curve(curve, result, **kwargs)
             #title(hanle_curve_title_from_stored(curve_id))
             if not constrain_background:
                 plt.savefig(os.path.join(fit_plots_dir, fit_plot_filename(s, w)))
@@ -762,20 +775,33 @@ def plot_lifetime_for_power_dependence(db_conn, query, exp_dir, envir, title):
 
     fits.to_csv(os.path.join(exp_dir, envir['eid'] + ' data vs. pump power.csv'))
 
-def plot_amplitude_for_energy_dependence(db_conn, query, exp_dir, envir, title):
+def plot_amplitude_for_energy_dependence(db_conn, query, exp_dir, envir, title, preplot=None):
     hanle_curve_fits = db_conn.spin_optics.hanle_curve_fits
     fits = field_dataframe(hanle_curve_fits.find(query),
                        ['probe_energy', 'sample_temperature','amplitude', 'inv_hwhm', 'probe_background', 'offset', 'pump_intensity'])
     print(fits)
     fig, ax = plt.subplots()
-    plt.plot(fits['probe_energy'], fits['amplitude_0'], '^r', label='g = 0.33')
-    plt.plot(fits['probe_energy'], fits['amplitude_1'], 'ok', label='g = 2.7')
 
+    ax2 = None
+    if preplot:
+        ax2 = preplot(fig, ax)
+
+    # TODO: make other plot functions match axis use and preplot
+    ax.plot(fits['probe_energy'], fits['amplitude_0'], '^r', label='g = 0.33')
+    ax.plot(fits['probe_energy'], fits['amplitude_1'], 'ok', label='g = 2.7')
+    ax.axhline(y=0, color='grey', linewidth=1)
     ax.set_yticklabels(ax.get_yticks()/1e-6);
-    plt.xlabel('Energy (eV)')
-    plt.ylabel('Amplitude ($\mu rad$)')
+    ax.set_xlabel('Energy (eV)')
+    ax.set_ylabel('Faraday Rotation ($\mu rad$)')
     plt.title(title)
-    plt.legend()
+
+    if ax2:
+        lines, labels = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(lines + lines2, labels + labels2, loc=0)
+    else:
+        ax.legend()
+
     plt.savefig(os.path.join(exp_dir, envir['eid'] + ' amplitude vs. energy.pdf'))
 
 def plot_amplitude_for_power_dependence(db_conn, query, exp_dir, envir, title):
